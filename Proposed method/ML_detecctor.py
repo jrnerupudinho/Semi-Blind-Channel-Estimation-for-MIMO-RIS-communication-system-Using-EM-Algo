@@ -1,9 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Created on Wed Feb  8 13:02:35 2023
 
 @author: saipraneeth
-
-As of 8/02 the code is functioning
 """
 
 import numpy as np
@@ -19,7 +19,7 @@ def channelMatrix(n_tx,n_rx,N,varh):
   H_BU = np.random.normal(loc=0, scale=np.sqrt(varh/2), size=(n_rx, n_tx*2)).view(np.complex128)  #*2 because we need two values to create a complex number view
   H_BS = np.random.normal(loc=0, scale=np.sqrt(varh/2), size=(N, n_tx*2)).view(np.complex128)
   H_SU = np.random.normal(loc=0, scale=np.sqrt(varh/2), size=(n_rx, N*2)).view(np.complex128)
-  h = np.concatenate((H_BU.flatten(), linalg.khatri_rao(H_BS.T, H_SU).flatten()))
+  h = np.concatenate((H_BU.flatten(order='F'), linalg.khatri_rao(H_BS.T, H_SU).flatten(order='F')))
   print(norm(h))
   return h
 
@@ -57,6 +57,7 @@ def em(Y_d,Y_p,T_d,T_p,Z_p,PsiTilde_td ,all_possibleSymbols,M,varn,itera,h_initi
     m_secondTermDenom = np.zeros(((N+1)*n_tx*n_rx,(N+1)*n_tx*n_rx),dtype='complex128')
     m_firstTermNumer = np.zeros(((N+1)*n_tx*n_rx,1),dtype='complex128')
     m_firstTermDenom = np.zeros(((N+1)*n_tx*n_rx,(N+1)*n_tx*n_rx),dtype='complex128')
+    beta_exp_storage = mp.matrix(M**n_tx,T_d)
     # beta_denominator = 0 
     for t in range(0,T_d):
       beta_denominator = 0  
@@ -66,17 +67,20 @@ def em(Y_d,Y_p,T_d,T_p,Z_p,PsiTilde_td ,all_possibleSymbols,M,varn,itera,h_initi
       for j in range(0,np.power(M,n_tx)):
         first_dummy = Y_d[t]-np.matmul(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128')),theta_t)
         beta_exp = mp.exp(-np.power(norm(first_dummy),2)/np.power(varn,2))/beta_denominator
-        m_secondTermNumer = np.add(m_secondTermNumer,(beta_exp)*np.matmul(np.conjugate(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128'))).T,Y_d[t]))
-        m_secondTermDenom = np.add(m_secondTermDenom,(beta_exp)*np.matmul(np.conjugate(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128'))).T,(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128')))))
+        # print(j,t)
+        beta_exp_storage[j,t] = beta_exp
+      beta_index = np.argmax(beta_exp_storage[:,t])
+      m_secondTermNumer = np.add(m_secondTermNumer,np.matmul(np.conjugate(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[beta_index][np.newaxis]),np.eye(n_rx,dtype='complex128'))).T,Y_d[t]))
+      m_secondTermDenom = np.add(m_secondTermDenom,np.matmul(np.conjugate(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[beta_index][np.newaxis]),np.eye(n_rx,dtype='complex128'))).T,(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[beta_index][np.newaxis]),np.eye(n_rx,dtype='complex128')))))
     for t in range(0,T_p):
       m_firstTermNumer += np.matmul(np.conjugate(Z_p[t]).T,Y_p[t])
       m_firstTermDenom += np.matmul(np.conjugate(Z_p[t]).T,Z_p[t])
     # m_secondTermDenom = helperPrecisionFloat(m_secondTermDenom)
     # m_secondTermNumer = helperPrecisionFloat(m_secondTermNumer)
-    # theta_tPlusOne = np.linalg.solve(m_firstTermDenom + m_secondTermDenom,m_firstTermNumer + m_secondTermNumer)
-    first_term = m_firstTermDenom + m_secondTermDenom;
-    second_Term = m_firstTermNumer + m_secondTermNumer;
-    theta_tPlusOne = np.linalg.solve(helperMPCtoFLoat(first_term),helperMPCtoFLoat(second_Term))
+    theta_tPlusOne = np.linalg.solve(m_firstTermDenom + m_secondTermDenom,m_firstTermNumer + m_secondTermNumer)
+    # first_term = m_firstTermDenom + m_secondTermDenom;
+    # second_Term = m_firstTermNumer + m_secondTermNumer;
+    # theta_tPlusOne = np.linalg.solve(helperMPCtoFLoat(first_term),helperMPCtoFLoat(second_Term))
     theta_t = theta_tPlusOne
     print(norm(theta_t))
   return theta_t
@@ -176,5 +180,5 @@ plt.ylabel('NMSE')
 plt.xlabel('T_p')
 plt.xticks(T_p)
 plt.yscale("log")
-plt.title(' proposed methodß with DFT for pilots')
+plt.title(' Proposed method with DFT for pilots - ML detector')
 plt.show()

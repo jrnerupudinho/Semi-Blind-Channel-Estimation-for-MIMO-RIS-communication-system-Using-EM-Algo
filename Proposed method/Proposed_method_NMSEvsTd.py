@@ -1,15 +1,8 @@
-"""
-Created on Wed Feb  8 13:02:35 2023
-
-@author: saipraneeth
-
-As of 8/02 the code is functioning
-"""
+# The code is pretty much functioning with ML detector and exact value as of 09/02
 
 import numpy as np
 import QAM as qp
 from numpy.linalg import norm
-from scipy import special as sp
 import matplotlib.pyplot as plt
 import itertools
 from scipy import linalg
@@ -24,6 +17,7 @@ def channelMatrix(n_tx,n_rx,N,varh):
   return h
 
 def symbols(n_tx,M,T_d):
+  # X_p = []
   X_d = []
   qam = qp.QAModulation(M)
   qamCons = qam.constellation
@@ -47,7 +41,6 @@ def pilotSymbols(n_tx,M,T_p):
   return X_p
 
 
-
 def em(Y_d,Y_p,T_d,T_p,Z_p,PsiTilde_td ,all_possibleSymbols,M,varn,itera,h_initial):
   n_rx,_ = Y_d[0].shape
   theta_t = h_initial
@@ -57,6 +50,7 @@ def em(Y_d,Y_p,T_d,T_p,Z_p,PsiTilde_td ,all_possibleSymbols,M,varn,itera,h_initi
     m_secondTermDenom = np.zeros(((N+1)*n_tx*n_rx,(N+1)*n_tx*n_rx),dtype='complex128')
     m_firstTermNumer = np.zeros(((N+1)*n_tx*n_rx,1),dtype='complex128')
     m_firstTermDenom = np.zeros(((N+1)*n_tx*n_rx,(N+1)*n_tx*n_rx),dtype='complex128')
+    beta_exp_storage = mp.matrix(M^n_tx,T_d)
     # beta_denominator = 0 
     for t in range(0,T_d):
       beta_denominator = 0  
@@ -71,8 +65,8 @@ def em(Y_d,Y_p,T_d,T_p,Z_p,PsiTilde_td ,all_possibleSymbols,M,varn,itera,h_initi
     for t in range(0,T_p):
       m_firstTermNumer += np.matmul(np.conjugate(Z_p[t]).T,Y_p[t])
       m_firstTermDenom += np.matmul(np.conjugate(Z_p[t]).T,Z_p[t])
-    # m_secondTermDenom = helperPrecisionFloat(m_secondTermDenom)
-    # m_secondTermNumer = helperPrecisionFloat(m_secondTermNumer)
+    # # m_secondTermDenom = helperPrecisionFloat(m_secondTermDenom)
+    # # m_secondTermNumer = helperPrecisionFloat(m_secondTermNumer)
     # theta_tPlusOne = np.linalg.solve(m_firstTermDenom + m_secondTermDenom,m_firstTermNumer + m_secondTermNumer)
     first_term = m_firstTermDenom + m_secondTermDenom;
     second_Term = m_firstTermNumer + m_secondTermNumer;
@@ -80,6 +74,16 @@ def em(Y_d,Y_p,T_d,T_p,Z_p,PsiTilde_td ,all_possibleSymbols,M,varn,itera,h_initi
     theta_t = theta_tPlusOne
     print(norm(theta_t))
   return theta_t
+
+
+def helperMPCtoFLoat(matrix):
+    rows,cols = matrix.shape
+    a = np.zeros((rows,cols),dtype = "complex128")
+    for i in range(rows):
+        for j in range(cols):
+            a[i,j] = complex(float(matrix[i,j].real),float(matrix[i,j].imag))
+    return a    
+    
 
 
 def irsMatrix(T_p,T_d,N,beta_min,amp):
@@ -94,21 +98,6 @@ def irsMatrix(T_p,T_d,N,beta_min,amp):
      PsiTilde_td.append(psi_t)  
   PsiTilde_td =np.concatenate( PsiTilde_td, axis=1 )
   return PsiTilde_tp, PsiTilde_td
-
-def helperPrecisionFloat(matrix):
-    rows,cols = matrix.shape
-    a = np.zeros((rows,cols),dtype = "complex128")
-    for i in range(rows):
-        for j in range(cols):
-            a[i,j] = complex(float(np.real(matrix[i,j])),float(np.imag(matrix[i,j])))
-    return a
-def helperMPCtoFLoat(matrix):
-    rows,cols = matrix.shape
-    a = np.zeros((rows,cols),dtype = "complex128")
-    for i in range(rows):
-        for j in range(cols):
-            a[i,j] = complex(float(matrix[i,j].real),float(matrix[i,j].imag))
-    return a    
     
 def receivedSignals(T_p,T_d,PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p,h,varn,M_symbols):
   Z_p = []
@@ -129,14 +118,13 @@ def receivedSignals(T_p,T_d,PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p,h,varn,M_
   return Y_p,Y_d,Z_p,Z_d,h_initial
 
 
-T_d = 50; # Number of data symbols
-T_p = [4,8,12,16,20,24,28,32,36,40]; # Number of pilot symbols
-# T_p = [4]
+T_p = 16; # Number of data symbols
+T_d = [20,30,40,50,60,70,80,90,100]; # Number of pilot symbols
 N = 32; # Number of IRS elements
 n_rx = 8; # Number of receive antennas
 n_tx = 1; # Number of tr ansmit antennas
 itera = 3; # Number of EM iterations
-monte_iter = 20;  # Number of Monte carlo iterations
+monte_iter = 10;  # Number of Monte carlo iterations
 varx = 1;  # The variance of the complex data and pilots 
 varh = 1; # The variance of the channels
 beta_min = 0; #Minimum possible phase of IRS element
@@ -149,32 +137,32 @@ varn = 0.1
 
 
 # #Computation 
-mse = np.zeros((monte_iter,len(T_p)))
+mse = np.zeros((monte_iter,len(T_d)))
 for i in range(monte_iter):
     h = channelMatrix(n_tx,n_rx,N,varh)
-    X_d,all_possibleSymbols = symbols(n_tx,M_symbols,T_d)
-    for tp in range(len(T_p)):      
-      PsiTilde_tp,PsiTilde_td = irsMatrix(T_p[tp],T_d,N,beta_min,amp)
-      # PsiTilde_tp = np.insert(PsiTilde_tp,0,np.ones((1,T_p[tp]),dtype='complex128'),axis= 0)
-      PsiTilde_td = np.insert(PsiTilde_td,0,np.ones((1,T_d),dtype='complex128'),axis= 0)
-      # print(np.matmul(PsiTilde_tp,np.conjugate(PsiTilde_tp).T))
-      X_p = pilotSymbols(n_tx,M_symbols,T_p[tp])
+    X_p = pilotSymbols(n_tx,M_symbols,T_p)
+    for td in range(len(T_d)):
+      X_d,all_possibleSymbols = symbols(n_tx,M_symbols,T_d[td])
+      PsiTilde_tp,PsiTilde_td = irsMatrix(T_p,T_d[td],N,beta_min,amp)
+      PsiTilde_td = np.insert(PsiTilde_td,0,np.ones((1,T_d[td]),dtype='complex128'),axis= 0)
       # X_d,all_possibleSymbols = symbols(T_p[tp],T_d,n_tx,M_symbols)
-      Y_p,Y_d,Z_p,Z_d,h_initial = receivedSignals(T_p[tp],T_d,PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p,h,varn,M_symbols)
-      theta_hat = em(Y_d,Y_p,T_d,T_p[tp],Z_p,PsiTilde_td ,all_possibleSymbols,M_symbols,varn,itera,h_initial)
+      Y_p,Y_d,Z_p,Z_d,h_initial = receivedSignals(T_p,T_d[td],PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p,h,varn,M_symbols)
+      theta_hat = em(Y_d,Y_p,T_d[td],T_p,Z_p,PsiTilde_td ,all_possibleSymbols,M_symbols,varn,itera,h_initial)
       print("original:",norm(h))
       print("predicted",norm(theta_hat))
-      mse[i][tp] = np.matrix.trace(np.abs(np.matmul((np.conjugate(theta_hat-h[:,np.newaxis]).T),(theta_hat-h[:,np.newaxis]))))/np.power(norm(h[:,np.newaxis]),2)
+      mse[i][td] = np.matrix.trace(np.abs(np.matmul((np.conjugate(theta_hat-h[:,np.newaxis]).T),(theta_hat-h[:,np.newaxis]))))/np.power(norm(h[:,np.newaxis]),2)
       # mse[i][tp] = np.power(norm(np.subtract(theta_hat,h[:,np.newaxis])),2)/np.power(norm(h[:,np.newaxis]),2)
     if(i%5 == 0):
       print("The monte carlo Iteration Number is: ",i)
 mse = np.average(mse, axis=0)
 
-plt.plot(T_p, mse, label = 'Proposed method')
+plt.plot(T_d, mse, label = 'Proposed method')
 plt.grid(color = 'red', linestyle = '--', linewidth = 0.5)
 plt.ylabel('NMSE')
-plt.xlabel('T_p')
-plt.xticks(T_p)
+plt.xlabel('T_d')
+plt.xticks(T_d)
 plt.yscale("log")
-plt.title(' proposed methodß with DFT for pilots')
+plt.title(' Proposed  method - Exact')
 plt.show()
+
+

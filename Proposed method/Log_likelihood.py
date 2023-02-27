@@ -1,10 +1,4 @@
-"""
-Created on Wed Feb  8 13:02:35 2023
-
-@author: saipraneeth
-
-As of 8/02 the code is functioning
-"""
+#Iterations vs loglikehood function
 
 import numpy as np
 import QAM as qp
@@ -48,52 +42,55 @@ def pilotSymbols(n_tx,M,T_p):
 
 
 
-def em(Y_d,Y_p,T_d,T_p,Z_p,PsiTilde_td ,all_possibleSymbols,M,varn,itera,h_initial):
+def em(Y_d,Y_p,T_d,T_p,Z_p,Z_d,PsiTilde_td ,all_possibleSymbols,M,varn,itera,h_initial,n_tx):
   n_rx,_ = Y_d[0].shape
   theta_t = h_initial
   print("inital theta",norm(theta_t))
+  e_firstTerm =  T_d*n_tx*np.log(M)
+  e_secondTerm = (T_d+T_p)*np.log(np.pi*(varn**2))
+  logLikelihood = np.zeros((1,itera))
   for l in range(itera):
     m_secondTermNumer = np.zeros(((N+1)*n_tx*n_rx,1),dtype='complex128')
     m_secondTermDenom = np.zeros(((N+1)*n_tx*n_rx,(N+1)*n_tx*n_rx),dtype='complex128')
     m_firstTermNumer = np.zeros(((N+1)*n_tx*n_rx,1),dtype='complex128')
     m_firstTermDenom = np.zeros(((N+1)*n_tx*n_rx,(N+1)*n_tx*n_rx),dtype='complex128')
+    beta_exp_storage = mp.matrix(M^n_tx,T_d)
     # beta_denominator = 0 
     for t in range(0,T_d):
-      beta_denominator = 0  
+      beta_denominator = 0 
       for k in range(0,np.power(M,n_tx)):
         first_dummy_den = Y_d[t]-np.matmul(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[k][np.newaxis]),np.eye(n_rx,dtype='complex128')),theta_t)
         beta_denominator += mp.exp(-np.power(norm(first_dummy_den),2)/np.power(varn,2))
       for j in range(0,np.power(M,n_tx)):
         first_dummy = Y_d[t]-np.matmul(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128')),theta_t)
         beta_exp = mp.exp(-np.power(norm(first_dummy),2)/np.power(varn,2))/beta_denominator
-        m_secondTermNumer = np.add(m_secondTermNumer,(beta_exp)*np.matmul(np.conjugate(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128'))).T,Y_d[t]))
-        m_secondTermDenom = np.add(m_secondTermDenom,(beta_exp)*np.matmul(np.conjugate(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128'))).T,(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128')))))
+        # print(j,t)
+        beta_exp_storage[j,t] = beta_exp
+      beta_index = np.argmax(beta_exp_storage[:,t])
+      m_secondTermNumer = np.add(m_secondTermNumer,np.matmul(np.conjugate(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[beta_index][np.newaxis]),np.eye(n_rx,dtype='complex128'))).T,Y_d[t]))
+      m_secondTermDenom = np.add(m_secondTermDenom,np.matmul(np.conjugate(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[beta_index][np.newaxis]),np.eye(n_rx,dtype='complex128'))).T,(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[beta_index][np.newaxis]),np.eye(n_rx,dtype='complex128')))))
     for t in range(0,T_p):
       m_firstTermNumer += np.matmul(np.conjugate(Z_p[t]).T,Y_p[t])
       m_firstTermDenom += np.matmul(np.conjugate(Z_p[t]).T,Z_p[t])
     # m_secondTermDenom = helperPrecisionFloat(m_secondTermDenom)
     # m_secondTermNumer = helperPrecisionFloat(m_secondTermNumer)
-    # theta_tPlusOne = np.linalg.solve(m_firstTermDenom + m_secondTermDenom,m_firstTermNumer + m_secondTermNumer)
     first_term = m_firstTermDenom + m_secondTermDenom;
     second_Term = m_firstTermNumer + m_secondTermNumer;
+    # theta_tPlusOne = np.linalg.solve(m_firstTermDenom + m_secondTermDenom,m_firstTermNumer + m_secondTermNumer)
     theta_tPlusOne = np.linalg.solve(helperMPCtoFLoat(first_term),helperMPCtoFLoat(second_Term))
     theta_t = theta_tPlusOne
     print(norm(theta_t))
-  return theta_t
+    logLikelihood[:,l] = -e_firstTerm-e_secondTerm-((1/varn**2)*norm(Y_p - np.matmul(Z_p,theta_t)))-((1/varn**2)*norm(Y_d - np.matmul(Z_d,theta_t)))
+    # print(logLikelihood)
+  return theta_t,logLikelihood.reshape(itera,1)
 
-
-def irsMatrix(T_p,T_d,N,beta_min,amp):
-  PsiTilde_tp = np.zeros((N+1,T_p),dtype = 'complex128')
-  PsiTilde_td =  []
-  for n in range(0,N):
-    for t in range(0,T_p):
-            PsiTilde_tp[n,t] = np.exp((-1j*2*np.pi*(t)*(n))/(N))
-  for t in range(0,T_d):
-     beta = (beta_max-beta_min)*np.random.uniform(0,1,(N,1))+beta_min; 
-     psi_t = amp*np.exp(1j*beta);
-     PsiTilde_td.append(psi_t)  
-  PsiTilde_td =np.concatenate( PsiTilde_td, axis=1 )
-  return PsiTilde_tp, PsiTilde_td
+def helperMPCtoFLoat(matrix):
+    rows,cols = matrix.shape
+    a = np.zeros((rows,cols),dtype = "complex128")
+    for i in range(rows):
+        for j in range(cols):
+            a[i,j] = complex(float(matrix[i,j].real),float(matrix[i,j].imag))
+    return a    
 
 def helperPrecisionFloat(matrix):
     rows,cols = matrix.shape
@@ -102,15 +99,21 @@ def helperPrecisionFloat(matrix):
         for j in range(cols):
             a[i,j] = complex(float(np.real(matrix[i,j])),float(np.imag(matrix[i,j])))
     return a
-def helperMPCtoFLoat(matrix):
-    rows,cols = matrix.shape
-    a = np.zeros((rows,cols),dtype = "complex128")
-    for i in range(rows):
-        for j in range(cols):
-            a[i,j] = complex(float(matrix[i,j].real),float(matrix[i,j].imag))
-    return a    
+
+def irsMatrix(T_p,T_d,N,beta_min,amp):
+  PsiTilde_tp = np.zeros((N+1,T_p),dtype = 'complex128')
+  PsiTilde_td =  []
+  for n in range(0,N+1):
+    for t in range(0,T_p):
+            PsiTilde_tp[n,t] = np.exp((-1j*2*np.pi*(t)*(n))/(N))
+  for t in range(0,T_d):
+     beta = (beta_max-beta_min)*np.random.uniform(0,1,(N,1))+beta_min; 
+     psi_t = amp*np.exp(1j*beta);
+     PsiTilde_td.append(psi_t)  
+  PsiTilde_td =np.concatenate( PsiTilde_td, axis=1 )
+  return PsiTilde_tp, PsiTilde_td
     
-def receivedSignals(T_p,T_d,PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p,h,varn,M_symbols):
+def receivedSignals(T_p,T_d,PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p,h,varn,M_symbols,N):
   Z_p = []
   Z_d = []
   Y_p = []
@@ -130,13 +133,13 @@ def receivedSignals(T_p,T_d,PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p,h,varn,M_
 
 
 T_d = 50; # Number of data symbols
-T_p = [4,8,12,16,20,24,28,32,36,40]; # Number of pilot symbols
+T_p = [4]; # Number of pilot symbols
 # T_p = [4]
 N = 32; # Number of IRS elements
 n_rx = 8; # Number of receive antennas
 n_tx = 1; # Number of tr ansmit antennas
-itera = 3; # Number of EM iterations
-monte_iter = 20;  # Number of Monte carlo iterations
+itera =5; # Number of EM iterations
+monte_iter = 1;  # Number of Monte carlo iterations
 varx = 1;  # The variance of the complex data and pilots 
 varh = 1; # The variance of the channels
 beta_min = 0; #Minimum possible phase of IRS element
@@ -149,32 +152,27 @@ varn = 0.1
 
 
 # #Computation 
-mse = np.zeros((monte_iter,len(T_p)))
+mse = []
 for i in range(monte_iter):
     h = channelMatrix(n_tx,n_rx,N,varh)
-    X_d,all_possibleSymbols = symbols(n_tx,M_symbols,T_d)
-    for tp in range(len(T_p)):      
-      PsiTilde_tp,PsiTilde_td = irsMatrix(T_p[tp],T_d,N,beta_min,amp)
-      # PsiTilde_tp = np.insert(PsiTilde_tp,0,np.ones((1,T_p[tp]),dtype='complex128'),axis= 0)
-      PsiTilde_td = np.insert(PsiTilde_td,0,np.ones((1,T_d),dtype='complex128'),axis= 0)
-      # print(np.matmul(PsiTilde_tp,np.conjugate(PsiTilde_tp).T))
-      X_p = pilotSymbols(n_tx,M_symbols,T_p[tp])
-      # X_d,all_possibleSymbols = symbols(T_p[tp],T_d,n_tx,M_symbols)
-      Y_p,Y_d,Z_p,Z_d,h_initial = receivedSignals(T_p[tp],T_d,PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p,h,varn,M_symbols)
-      theta_hat = em(Y_d,Y_p,T_d,T_p[tp],Z_p,PsiTilde_td ,all_possibleSymbols,M_symbols,varn,itera,h_initial)
-      print("original:",norm(h))
-      print("predicted",norm(theta_hat))
-      mse[i][tp] = np.matrix.trace(np.abs(np.matmul((np.conjugate(theta_hat-h[:,np.newaxis]).T),(theta_hat-h[:,np.newaxis]))))/np.power(norm(h[:,np.newaxis]),2)
-      # mse[i][tp] = np.power(norm(np.subtract(theta_hat,h[:,np.newaxis])),2)/np.power(norm(h[:,np.newaxis]),2)
-    if(i%5 == 0):
-      print("The monte carlo Iteration Number is: ",i)
-mse = np.average(mse, axis=0)
-
-plt.plot(T_p, mse, label = 'Proposed method')
+    X_d,all_possibleSymbols = symbols(n_tx,M_symbols,T_d)    
+    PsiTilde_tp,PsiTilde_td = irsMatrix(T_p[0],T_d,N,beta_min,amp)
+    # PsiTilde_tp = np.insert(PsiTilde_tp,0,np.ones((1,T_p[0]),dtype='complex128'),axis= 0)
+    PsiTilde_td = np.insert(PsiTilde_td,0,np.ones((1,T_d),dtype='complex128'),axis= 0)
+    # print(np.matmul(PsiTilde_tp,np.conjugate(PsiTilde_tp).T))
+    X_p = pilotSymbols(n_tx,M_symbols,T_p[0])
+    # X_d,all_possibleSymbols = symbols(T_p[tp],T_d,n_tx,M_symbols)
+    Y_p,Y_d,Z_p,Z_d,h_initial = receivedSignals(T_p[0],T_d,PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p,h,varn,M_symbols,N)
+    theta_hat,logLikelihood = em(Y_d,Y_p,T_d,T_p[0],Z_p,Z_d,PsiTilde_td ,all_possibleSymbols,M_symbols,varn,itera,h_initial,n_tx)
+    print("original:",norm(h))
+    print("predicted",norm(theta_hat))
+    mse.append(logLikelihood)
+mse = np.average(np.hstack(mse), axis=1)
+plt.plot(range(itera), mse, label = 'Proposed method')
 plt.grid(color = 'red', linestyle = '--', linewidth = 0.5)
-plt.ylabel('NMSE')
-plt.xlabel('T_p')
-plt.xticks(T_p)
-plt.yscale("log")
-plt.title(' proposed methodß with DFT for pilots')
+plt.ylabel('LLF')
+plt.xlabel('Iterations')
+plt.xticks(range(itera))
+# plt.yscale("log")
+plt.title(' Proposed method with DFT for pilots')
 plt.show()
