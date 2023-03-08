@@ -51,6 +51,7 @@ def pilotSymbols(n_tx,M,T_p):
 def em(Y_d,Y_p,T_d,T_p,Z_p,PsiTilde_td ,all_possibleSymbols,M,varn,itera,h_initial):
   n_rx,_ = Y_d[0].shape
   theta_t = h_initial
+  # theta_t = np.ones((n_rx*n_tx*(N+1),1),dtype = 'complex128')
   print("inital theta",norm(theta_t))
   for l in range(itera):
     m_secondTermNumer = np.zeros(((N+1)*n_tx*n_rx,1),dtype='complex128')
@@ -129,14 +130,14 @@ def receivedSignals(T_p,T_d,PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p,h,varn,M_
   return Y_p,Y_d,Z_p,Z_d,h_initial
 
 
-T_d = 50; # Number of data symbols
-T_p = [4,8,12,16,20,24,28,32,36,40]; # Number of pilot symbols
+T_d = 30; # Number of data symbols
+T_p = [4,12,20,28,36,40]; # Number of pilot symbols
 # T_p = [4]
-N = 32; # Number of IRS elements
-n_rx = 8; # Number of receive antennas
-n_tx = 1; # Number of tr ansmit antennas
+N = 10; # Number of IRS elements
+n_rx = 4; # Number of receive antennas
+n_tx = 4; # Number of tr ansmit antennas
 itera = 3; # Number of EM iterations
-monte_iter = 20;  # Number of Monte carlo iterations
+monte_iter = 1;  # Number of Monte carlo iterations
 varx = 1;  # The variance of the complex data and pilots 
 varh = 1; # The variance of the channels
 beta_min = 0; #Minimum possible phase of IRS element
@@ -176,5 +177,5 @@ plt.ylabel('NMSE')
 plt.xlabel('T_p')
 plt.xticks(T_p)
 plt.yscale("log")
-plt.title(' proposed methodß with DFT for pilots')
+plt.title(' proposed method')
 plt.show()
