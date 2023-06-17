@@ -9,17 +9,17 @@ As of 8/02 the code is functioning
 import numpy as np
 import QAM as qp
 from numpy.linalg import norm
-from scipy import special as sp
 import matplotlib.pyplot as plt
 import itertools
 from scipy import linalg
 import mpmath as mp
-
+import time
+import gmpy2 as gp
 def channelMatrix(n_tx,n_rx,N,varh):
   H_BU = np.random.normal(loc=0, scale=np.sqrt(varh/2), size=(n_rx, n_tx*2)).view(np.complex128)  #*2 because we need two values to create a complex number view
   H_BS = np.random.normal(loc=0, scale=np.sqrt(varh/2), size=(N, n_tx*2)).view(np.complex128)
   H_SU = np.random.normal(loc=0, scale=np.sqrt(varh/2), size=(n_rx, N*2)).view(np.complex128)
-  h = np.concatenate((H_BU.flatten(), linalg.khatri_rao(H_BS.T, H_SU).flatten()))
+  h = np.concatenate((H_BU.flatten(order='F'), linalg.khatri_rao(H_BS.T, H_SU).flatten(order='F')))
   print(norm(h))
   return h
 
@@ -47,7 +47,6 @@ def pilotSymbols(n_tx,M,T_p):
   return X_p
 
 
-
 def em(Y_d,Y_p,T_d,T_p,Z_p,PsiTilde_td ,all_possibleSymbols,M,varn,itera,h_initial):
   n_rx,_ = Y_d[0].shape
   theta_t = h_initial
@@ -60,13 +59,14 @@ def em(Y_d,Y_p,T_d,T_p,Z_p,PsiTilde_td ,all_possibleSymbols,M,varn,itera,h_initi
     m_firstTermDenom = np.zeros(((N+1)*n_tx*n_rx,(N+1)*n_tx*n_rx),dtype='complex128')
     # beta_denominator = 0 
     for t in range(0,T_d):
-      beta_denominator = 0  
+      beta_denominator = 0
+      first_dummy_den = []
       for k in range(0,np.power(M,n_tx)):
-        first_dummy_den = Y_d[t]-np.matmul(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[k][np.newaxis]),np.eye(n_rx,dtype='complex128')),theta_t)
-        beta_denominator += mp.exp(-np.power(norm(first_dummy_den),2)/np.power(varn,2))
+        first_dummy_den.append( Y_d[t]-np.matmul(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[k][np.newaxis]),np.eye(n_rx,dtype='complex128')),theta_t))
+        beta_denominator += gp.exp(-np.power(norm(first_dummy_den[k]),2)/np.power(varn,2))
       for j in range(0,np.power(M,n_tx)):
-        first_dummy = Y_d[t]-np.matmul(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128')),theta_t)
-        beta_exp = mp.exp(-np.power(norm(first_dummy),2)/np.power(varn,2))/beta_denominator
+        # first_dummy = Y_d[t]-np.matmul(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128')),theta_t)
+        beta_exp = gp.exp(-np.power(norm(first_dummy_den[j]),2)/np.power(varn,2))/beta_denominator
         m_secondTermNumer = np.add(m_secondTermNumer,(beta_exp)*np.matmul(np.conjugate(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128'))).T,Y_d[t]))
         m_secondTermDenom = np.add(m_secondTermDenom,(beta_exp)*np.matmul(np.conjugate(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128'))).T,(np.kron(np.kron(PsiTilde_td[:,t][np.newaxis],all_possibleSymbols[j][np.newaxis]),np.eye(n_rx,dtype='complex128')))))
     for t in range(0,T_p):
@@ -130,10 +130,10 @@ def receivedSignals(T_p,T_d,PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p,h,varn,M_
   return Y_p,Y_d,Z_p,Z_d,h_initial
 
 
-T_d = 30; # Number of data symbols
+T_d = 50; # Number of data symbols
 T_p = [4,12,20,28,36,40]; # Number of pilot symbols
 # T_p = [4]
-N = 10; # Number of IRS elements
+N = 32; # Number of IRS elements
 n_rx = 4; # Number of receive antennas
 n_tx = 4; # Number of tr ansmit antennas
 itera = 3; # Number of EM iterations
@@ -154,17 +154,21 @@ mse = np.zeros((monte_iter,len(T_p)))
 for i in range(monte_iter):
     h = channelMatrix(n_tx,n_rx,N,varh)
     X_d,all_possibleSymbols = symbols(n_tx,M_symbols,T_d)
+    X_p = pilotSymbols(n_tx,M_symbols,max(T_p))
     for tp in range(len(T_p)):      
       PsiTilde_tp,PsiTilde_td = irsMatrix(T_p[tp],T_d,N,beta_min,amp)
       # PsiTilde_tp = np.insert(PsiTilde_tp,0,np.ones((1,T_p[tp]),dtype='complex128'),axis= 0)
       PsiTilde_td = np.insert(PsiTilde_td,0,np.ones((1,T_d),dtype='complex128'),axis= 0)
       # print(np.matmul(PsiTilde_tp,np.conjugate(PsiTilde_tp).T))
-      X_p = pilotSymbols(n_tx,M_symbols,T_p[tp])
-      # X_d,all_possibleSymbols = symbols(T_p[tp],T_d,n_tx,M_symbols)
-      Y_p,Y_d,Z_p,Z_d,h_initial = receivedSignals(T_p[tp],T_d,PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p,h,varn,M_symbols)
+      Y_p,Y_d,Z_p,Z_d,h_initial = receivedSignals(T_p[tp],T_d,PsiTilde_tp,PsiTilde_td ,n_rx,n_tx,X_d,X_p[:T_p[tp]],h,varn,M_symbols)
+      start = time.perf_counter()
       theta_hat = em(Y_d,Y_p,T_d,T_p[tp],Z_p,PsiTilde_td ,all_possibleSymbols,M_symbols,varn,itera,h_initial)
+      end = time.perf_counter()
+      print("Elapsed (with compilation) = {}s".format((end - start)))
+
       print("original:",norm(h))
       print("predicted",norm(theta_hat))
+      print("l:",monte_iter)
       mse[i][tp] = np.matrix.trace(np.abs(np.matmul((np.conjugate(theta_hat-h[:,np.newaxis]).T),(theta_hat-h[:,np.newaxis]))))/np.power(norm(h[:,np.newaxis]),2)
       # mse[i][tp] = np.power(norm(np.subtract(theta_hat,h[:,np.newaxis])),2)/np.power(norm(h[:,np.newaxis]),2)
     if(i%5 == 0):
